@@ -24,8 +24,8 @@ row1_1, row1_2 = st.beta_columns((2,3))
 
 #app preamble and setup for the search bar
 with row1_1:
-    st.title("Track Your Favorite Stocks")
-    st.subheader("A web app by [Angel Sarmiento](https://github.com/angel-sarmiento)")
+    st.title("We Like the Stock")
+    st.subheader("A Web App by [Angel Sarmiento](https://github.com/angel-sarmiento)")
 
     def local_css(file_name):
         with open(file_name) as f:
@@ -54,6 +54,8 @@ with row1_2:
     """)
 
 #%% First plot
+
+st.header("Visualizing the Stock")
 
 # getting the stock and its important features
 def grab_stock(stock_ticker):
@@ -256,3 +258,13 @@ with row3_2:
     st.dataframe(option_dict[option_select], width = 800, height = 579)
 
 
+#%% SECTION FOR THE AUTOML BIT
+
+st.header("Predictions")
+st.subheader("Where is This Stock Going?")
+st.text("""
+    To be completely clear, despite the naming of this section, it is pretty much impossible 
+    to predict the price of stocks. Keep in mind that when viewing 
+    these data. These 'predictions' are more for a general understanding of some likely 
+    movements of the underlying security. None of this is investment advice. 
+    """)
