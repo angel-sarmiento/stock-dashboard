@@ -49,8 +49,9 @@ with row1_2:
     ##
     The purpose of this dashboard is to develop a broad sense of a stock's potential by using both the Yahoo Finance api
     to track the stocks themselves and the FRED api to track the general state of the economy. There is also some prediction
-    done using AutoML and rapid prototyping of machine learning models using pycaret. Note that this does not
-    constitute financial advice and I am not a CPA nor a financial professional. 
+    done using AutoML and rapid prototyping of machine learning models using pycaret. The Information should not be construed 
+    as investment/trading advice and is not meant to be a solicitation or recommendation to buy, sell, or hold any securities 
+    mentioned.
     """)
 
 #%% First plot
