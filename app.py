@@ -9,13 +9,21 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 
 import plotly.graph_objects as go
+import plotly.express as px
 
 import pycaret
-from datetime import date
+from pycaret.regression import *
+from datetime import date, timedelta
 
 today = date.today()
 
 t0 = today.strftime("%Y-%m-%d")
+
+# getting time periods for tomorrow and a month after
+tmrw = today + timedelta(days = 1) 
+tmrw_f = tmrw.strftime("%Y-%m-%d")
+mth = today + timedelta(days = 30)
+mth_f = mth.strftime("%Y-%m-%d")
 
 # Changing the dashboard to the wide layout 
 st.set_page_config(layout="wide")
@@ -261,11 +269,91 @@ with row3_2:
 
 #%% SECTION FOR THE AUTOML BIT
 
-st.header("Predictions")
-st.subheader("Where is This Stock Going?")
+st.header("Predictions: Where is This Stock Going?")
 st.text("""
     To be completely clear, despite the naming of this section, it is pretty much impossible 
     to predict the price of stocks. Keep in mind that when viewing 
     these data. These 'predictions' are more for a general understanding of some likely 
     movements of the underlying security. None of this is investment advice. 
     """)
+
+
+def get_time_setup(ticker):
+    #import pycaret
+    stock = yf.Ticker(ticker)
+    history = stock.history(period="5y")
+    stock_price = history['Open']
+
+    data = pd.DataFrame(stock_price)
+
+    # extract month and year from dates
+    data['Month'] = data.index.month
+    data['Year'] = data.index.year
+    data['Day'] = data.index.day
+
+    # create a sequence of numbers
+    data['Series'] = np.arange(1,len(data)+1)
+    
+    # Future Dates for predicting out of sample
+    future_dates = pd.date_range(start = tmrw_f, end = mth_f, freq = 'D')
+    future_df = pd.DataFrame()
+    future_df['Month'] = [i.month for i in future_dates]
+    future_df['Year'] = [i.year for i in future_dates]    
+    future_df['Day'] = [i.day for i in future_dates]
+    future_df['Series'] = np.arange(len(data),(len(data) +len(future_dates)))
+
+
+    return data, future_df
+
+def predict(model, future_df):
+    predictions_df = predict_model(model, data=future_df)
+    predictions = predictions_df['Label'][0]
+    return predictions
+
+time_data, future_df = get_time_setup(selected)
+
+#%%
+row4_1, row4_2 = st.beta_columns((1,1))
+
+
+# %%
+
+train = time_data[(time_data['Year'] <= today.year) & (time_data['Month'] < today.month)]
+test = time_data[(time_data['Year'] == today.year) & (time_data['Month'] == today.month)]
+
+with row4_1: 
+    st.subheader("AdaBoost Regression Model Metrics")
+    s = setup(data = train, test_data = test, target = 'Open', fold_strategy = 'timeseries', numeric_features = ['Day', 'Series', 'Year'], fold = 5, transform_target = True, session_id = 123, silent = True, verbose = False)
+    # Compare models
+    best = create_model('ada', fold = 10)    
+    model_results = pull()
+    st.dataframe(model_results.style.apply(lambda x: ['background: #f890e7' 
+                                  if (x.name == 'Mean')
+                                  else '' for i in x], axis=1), width = 800, height = 579)
+
+with row4_2:
+    # generate predictions on the original dataset
+    predictions_future = predict_model(best, data=future_df)
+    # add a date column in the dataset
+    # add a vertical rectange for test-set separation
+
+    future_df_i = predictions_future.set_index(pd.date_range(start=tmrw_f, end=mth_f, freq='D'))
+    conc = pd.concat([time_data, future_df_i])
+
+    fig5 = px.line(conc, x=conc.index, y=["Open", "Label"])
+
+    fig5.update_layout(
+        title =  "Predicting the Opening Price",
+        width = 800,
+        height = 600,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+        )
+
+    fig5.update_yaxes(
+        title = "Price"
+    )
+
+    st.plotly_chart(fig5)
+
+# %%
