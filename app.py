@@ -15,6 +15,9 @@ import pycaret
 from pycaret.regression import *
 from datetime import date, timedelta
 
+from streamlit import caching
+caching.clear_cache()
+
 today = date.today()
 
 t0 = today.strftime("%Y-%m-%d")
@@ -274,7 +277,9 @@ st.text("""
     To be completely clear, despite the naming of this section, it is pretty much impossible 
     to predict the price of stocks. Keep in mind that when viewing 
     these data. These 'predictions' are more for a general understanding of some likely 
-    movements of the underlying security. None of this is investment advice. 
+    movements of the underlying security. The model that worked best in offline testing
+    was the AdaBoost Regression Model. None of this is investment advice. Drag on the 
+    graph below to view a specific section. 
     """)
 
 
@@ -316,21 +321,24 @@ time_data, future_df = get_time_setup(selected)
 row4_1, row4_2 = st.beta_columns((1,1))
 
 
+
 # %%
 
 train = time_data[(time_data['Year'] <= today.year) & (time_data['Month'] < today.month)]
 test = time_data[(time_data['Year'] == today.year) & (time_data['Month'] == today.month)]
 
 with row4_1: 
-    st.subheader("AdaBoost Regression Model Metrics")
-    s = setup(data = train, test_data = test, target = 'Open', fold_strategy = 'timeseries', numeric_features = ['Day', 'Series', 'Year'], fold = 5, transform_target = True, session_id = 123, silent = True, verbose = False)
+    st.subheader("[AdaBoost Regression](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostRegressor.html) Model Metrics (10-Fold Cross-Validation)")
+    s = setup(data = train, test_data = test, target = 'Open', fold_strategy = 'timeseries', numeric_features = ['Day', 'Series', 'Year'], transform_target = True, silent = True, verbose = False)
     # Compare models
     best = create_model('ada', fold = 10)    
     model_results = pull()
     st.dataframe(model_results.style.apply(lambda x: ['background: #f890e7' 
                                   if (x.name == 'Mean')
-                                  else '' for i in x], axis=1), width = 800, height = 579)
+                                  else '' for i in x], axis=1), width = 1000, height = 600)
 
+
+## TODO: Fix problem where pycaret does not reset the session every time the streamlit dashboard reloads
 with row4_2:
     # generate predictions on the original dataset
     predictions_future = predict_model(best, data=future_df)
@@ -340,18 +348,27 @@ with row4_2:
     future_df_i = predictions_future.set_index(pd.date_range(start=tmrw_f, end=mth_f, freq='D'))
     conc = pd.concat([time_data, future_df_i])
 
-    fig5 = px.line(conc, x=conc.index, y=["Open", "Label"])
+    fig5 = px.line(conc, x=conc.index, y=["Open", "Label"], labels = {'variable': ''})
 
     fig5.update_layout(
         title =  "Predicting the Opening Price",
         width = 800,
         height = 600,
         paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
+        plot_bgcolor='rgba(0,0,0,0)',
+        legend=dict(
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01)
         )
+
 
     fig5.update_yaxes(
         title = "Price"
+    )
+    fig5.update_xaxes(
+        title = ""
     )
 
     st.plotly_chart(fig5)
