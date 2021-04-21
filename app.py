@@ -15,6 +15,9 @@ import pycaret
 from pycaret.regression import *
 from datetime import date, timedelta
 
+import random
+
+
 from streamlit import caching
 caching.clear_cache()
 
@@ -51,8 +54,18 @@ with row1_1:
     local_css("style.css")
     remote_css('https://fonts.googleapis.com/icon?family=Material+Icons')
     #icon("search")
-    selected = st.text_input("", "Type a Stock Ticker...")
+    selected = st.text_input("", "Type a Stock Ticker...", help='Just the ticker, for example: AAPL, aapl, msft. ')
     #button_clicked = st.button("Enter")
+    range_sel = st.selectbox(
+            'Select a time range:', 
+            ('1y',
+            '5y',
+            '10y',
+            'Max'), 
+            help="""This may break the predictions that are done at the bottom of this dashboard. 
+            Ideally you would want a larger range of time values, however some stocks will still not 
+            work despite this."""
+            )
 
 with row1_2:
     st.write(
@@ -62,18 +75,32 @@ with row1_2:
     to track the stocks themselves and the FRED api to track the general state of the economy. There is also some prediction
     done using AutoML and rapid prototyping of machine learning models using pycaret. The Information should not be construed 
     as investment/trading advice and is not meant to be a solicitation or recommendation to buy, sell, or hold any securities 
-    mentioned.
+    mentioned. Dislamer: This does not work for certain stocks and does not work for ETFs and Cryptocurrency. Namely, everything 
+    other than prices for these securities will result in an error.  
     """)
 
 #%% First plot
 
-st.header("Visualizing the Stock")
+def general_stock(selected):
+    stock = yf.Ticker(selected)
+    return stock
+
+gen_stock = general_stock(selected)
+
+main_head_str = "Visualizing the Stock Price of " + gen_stock.get_info()['longName'] 
+
+
+
+st.header(main_head_str)
+
+
+#First plot
 
 # getting the stock and its important features
-def grab_stock(stock_ticker):
-    stock = yf.Ticker(stock_ticker)
+def grab_stock(stock_ticker, range_sel):
+    #stock = yf.Ticker(stock_ticker)
     
-    history = stock.history(period="5y")
+    history = gen_stock.history(period=range_sel)
     
     column_names = ['Open', 'High', 'Low', 'Close', 'Volume'] 
     
@@ -133,10 +160,11 @@ def display_candlestick(df):
 #%% Main function calls for row 1
 
 if selected != "":  
-    df = grab_stock(selected)
+    df = grab_stock(selected, range_sel)
     fig = display_candlestick(df)
     st.plotly_chart(fig)
-
+    st.header('About the Company')
+    gen_stock.get_info()['longBusinessSummary']
 # running the funtion above to get the stock information
 q_fin, recommend, y_fin, in_holders, maj_holders, calendar, q_earn, y_earn, call_op, put_op = stock_tables(selected)
 
@@ -220,6 +248,30 @@ with row2_3:
     fig3 = holder_bar(in_holders)
     st.plotly_chart(fig3)
 
+
+#%%
+
+def get_exps(stock_ticker):
+    exp = list(gen_stock.options)
+    return exp
+
+
+def get_options(date, stock_ticker, type_of):
+    stock = yf.Ticker(stock_ticker) 
+    
+    unwanted_cols = ['contractSymbol', 'lastTradeDate', 'contractSize', 'currency']
+    
+    if type_of == 'Calls':
+        values = pd.DataFrame(stock.option_chain(date).calls).drop(unwanted_cols, axis = 1)
+    elif type_of == 'Puts':
+        values = pd.DataFrame(stock.option_chain(date).puts).drop(unwanted_cols, axis = 1)
+
+
+    #calls = pd.DataFrame(stock.option_chain(date).calls).drop(unwanted_cols, axis = 1)
+    #puts = pd.DataFrame(stock.option_chain(date).puts).drop(unwanted_cols, axis = 1)
+
+    return values
+
 #%%
 # 2 columns on third row 
 row3_1, row3_2 = st.beta_columns((3,3))
@@ -256,10 +308,13 @@ with row3_1:
 
 with row3_2:
 
-    option_dict = {
-        'Calls': call_op,
-        'Puts': put_op
-    }
+    exps = get_exps(selected)
+
+    #option_dict = {
+    #    'Calls': True,
+    #    'Puts': False
+    #}
+
 
     option_select = st.selectbox(
         'Select the Option Chain type for ' + selected + ' Stock:',
@@ -267,7 +322,17 @@ with row3_2:
         'Puts')
     )
 
-    st.dataframe(option_dict[option_select], width = 800, height = 579)
+    expiry_select = st.selectbox(
+        "",
+        (
+            exps
+        )
+    )
+
+    option_chain = get_options(date = expiry_select, stock_ticker = selected, type_of = option_select)
+
+    st.dataframe(option_chain, width = 800, height = 579)
+    #st.dataframe(option_dict[option_select], width = 800, height = 579)
 
 
 #%% SECTION FOR THE AUTOML BIT
@@ -283,10 +348,10 @@ st.text("""
     """)
 
 
-def get_time_setup(ticker):
+def get_time_setup(ticker, range_sel):
     #import pycaret
     stock = yf.Ticker(ticker)
-    history = stock.history(period="5y")
+    history = stock.history(period=range_sel)
     stock_price = history['Open']
 
     data = pd.DataFrame(stock_price)
@@ -300,7 +365,7 @@ def get_time_setup(ticker):
     data['Series'] = np.arange(1,len(data)+1)
     
     # Future Dates for predicting out of sample
-    future_dates = pd.date_range(start = tmrw_f, end = mth_f, freq = 'D')
+    future_dates = pd.date_range(start = tmrw_f, end = mth_f, freq = 'B')
     future_df = pd.DataFrame()
     future_df['Month'] = [i.month for i in future_dates]
     future_df['Year'] = [i.year for i in future_dates]    
@@ -315,7 +380,9 @@ def predict(model, future_df):
     predictions = predictions_df['Label'][0]
     return predictions
 
-time_data, future_df = get_time_setup(selected)
+time_data, future_df = get_time_setup(selected, range_sel)
+
+time_data.fillna(df.mean(), inplace=True)
 
 #%%
 row4_1, row4_2 = st.beta_columns((1,1))
@@ -328,49 +395,55 @@ train = time_data[(time_data['Year'] <= today.year) & (time_data['Month'] < toda
 test = time_data[(time_data['Year'] == today.year) & (time_data['Month'] == today.month)]
 
 with row4_1: 
-    st.subheader("[AdaBoost Regression](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostRegressor.html) Model Metrics (10-Fold Cross-Validation)")
-    s = setup(data = train, test_data = test, target = 'Open', fold_strategy = 'timeseries', numeric_features = ['Day', 'Series', 'Year'], transform_target = True, silent = True, verbose = False)
-    # Compare models
-    best = create_model('ada', fold = 10)    
-    model_results = pull()
-    st.dataframe(model_results.style.apply(lambda x: ['background: #f890e7' 
-                                  if (x.name == 'Mean')
-                                  else '' for i in x], axis=1), width = 1000, height = 600)
+
+    with np.errstate(divide='ignore'):
+        st.subheader("[AdaBoost Regression](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostRegressor.html) Model Metrics (10-Fold Cross-Validation)")
+        s = setup(data = train, test_data = test, target = 'Open', fold_strategy = 'timeseries', numeric_features = ['Day', 'Series', 'Year'], transform_target = True, silent = True, verbose = False, transform_target_method='yeo-johnson')
+        set_config('seed', random.randint(1, 999))
+        # Compare models
+        best = create_model('ada', fold = 10)
+        tuned_best = tune_model(best, optimize='MSE')    
+        model_results = pull()
+        st.dataframe(model_results.style.apply(lambda x: ['background: #f890e7' 
+                                    if (x.name == 'Mean')
+                                    else '' for i in x], axis=1), width = 1000, height = 600)
 
 
 ## TODO: Fix problem where pycaret does not reset the session every time the streamlit dashboard reloads
 with row4_2:
-    # generate predictions on the original dataset
-    predictions_future = predict_model(best, data=future_df)
-    # add a date column in the dataset
-    # add a vertical rectange for test-set separation
 
-    future_df_i = predictions_future.set_index(pd.date_range(start=tmrw_f, end=mth_f, freq='D'))
-    conc = pd.concat([time_data, future_df_i])
+    with np.errstate(divide='ignore'):
+        # generate predictions on the original dataset
+        predictions_future = predict_model(tuned_best, data=future_df)
+        # add a date column in the dataset
+        # add a vertical rectange for test-set separation
 
-    fig5 = px.line(conc, x=conc.index, y=["Open", "Label"], labels = {'variable': ''})
+        future_df_i = predictions_future.set_index(pd.date_range(start=tmrw_f, end=mth_f, freq='B'))
+        conc = pd.concat([time_data, future_df_i])
 
-    fig5.update_layout(
-        title =  "Predicting the Opening Price",
-        width = 800,
-        height = 600,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        legend=dict(
-        yanchor="top",
-        y=0.99,
-        xanchor="left",
-        x=0.01)
+        fig5 = px.line(conc, x=conc.index, y=["Open", "Label"], labels = {'variable': ''})
+
+        fig5.update_layout(
+            title =  "Predicting the Opening Price",
+            width = 800,
+            height = 600,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01)
+            )
+
+
+        fig5.update_yaxes(
+            title = "Price"
+        )
+        fig5.update_xaxes(
+            title = ""
         )
 
-
-    fig5.update_yaxes(
-        title = "Price"
-    )
-    fig5.update_xaxes(
-        title = ""
-    )
-
-    st.plotly_chart(fig5)
+        st.plotly_chart(fig5)
 
 # %%

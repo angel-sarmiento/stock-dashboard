@@ -90,3 +90,7 @@ fig.show()
 # %%
 save_model(best, 'deployment_model')
 # %%
+test = on.options
+# %%
+on.get_info()['longBusinessSummary']
+# %%
