@@ -28,7 +28,7 @@ t0 = today.strftime("%Y-%m-%d")
 # getting time periods for tomorrow and a month after
 tmrw = today + timedelta(days = 1) 
 tmrw_f = tmrw.strftime("%Y-%m-%d")
-mth = today + timedelta(days = 30)
+mth = today + timedelta(days = 60)
 mth_f = mth.strftime("%Y-%m-%d")
 
 # Changing the dashboard to the wide layout 
